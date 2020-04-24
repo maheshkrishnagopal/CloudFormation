@@ -1,0 +1,247 @@
+{
+	"AWSTemplateFormatVersion" : "2010-09-09",
+	
+	"Description" : "AWS CloudFormation Template to create a VPC Architecture with 1 Public Subnet and 1 Private Subnet. One EC2 instance in each subnet.",
+	
+	"Mappings" : {
+		"ImageIdMap" : {
+			"eu-west-1" : { "Ubuntu" : "ami-xxxxxxx", "Ubuntu18" : "ami-xxxxxxxxx" },
+			"us-east-1" : { "Ubuntu18" : "ami-xxxxxxx" }		
+		},
+		
+		"KeyPairMap" : {
+			"eu-west-1" : { "existing" : "my-new-ire" }	
+		}
+	},
+	
+	"Parameters" : {
+		"AWSRegion" : {
+			"Type" : "String",
+			"Default" : "eu-west-1",
+			"AllowedValues" : ["eu-west-1", "us-east-1", "us-east-2"],
+			"Description" : "AWS Region where the VPC has to be created."		
+		},
+		
+		"InstanceType" : {
+			"Description" : "EC2 Instance Type to create!",
+			"Type" : "String",
+			"Default" : "t1.micro",
+			"AllowedValues" : ["t1.micro", "t2.micro"]
+		},
+		
+		"CIDRBlock" : {
+			"Description" : "CIDR Block for the VPC to be created!!",
+			"Type" : "String",
+			"Default" : "172.0.0.0/18"
+		},
+		
+		"PublicSubnetCIDR" : {
+			"Description" : "CIDR Block for the Public Subnet created in the VPC",
+			"Type" : "String",
+			"Default" : "172.0.10.0/28"
+		},
+		
+		"PrivateSubnetCIDR" : {
+			"Description" : "CIDR Block for the Private Subnet created in the VPC",
+			"Type" : "String",
+			"Default" : "172.0.12.0/28"
+		},
+		
+		"PubSubInstanceName" : {
+			"Description" : "Instance Name for the EC2 in Public Subnet",
+			"Type" : "String",
+			"Default" : "WebService"
+		},
+		
+		"PriSubInstanceName" : {
+			"Description" : "Instance Name for the EC2 in the Private Subnet",
+			"Type" : "String",
+			"Default" : "Database Instance"
+		}
+	},
+	
+	"Resources" : {
+		"MyVPC" : {
+			"Description" : "The VPC to be created with the CIDR - CIDRBlock",
+			"Type" : "AWS::EC2::VPC",
+			"Properties" : {
+				"CidrBlock" : { "Ref" : "CIDRBlock" },
+				"EnableDnsHostnames" : "true",
+				"EnableDnsSupport" : "true",
+				"Tags" : [{
+					"Key" : "Name",
+					"Value" : "MyVPC"
+				},
+				{ 
+					"Key" : "VPCType" ,
+					"Value" : "DemoVPC"
+				}]
+			}
+		},
+		
+		"RouteTable" : {
+			"Description" : "Route Table creation for the VPC",
+			"Type" : "AWS::EC2::RouteTable",
+			"Properties" : {
+				"VpcId" : { "Ref" : "MyVPC" },
+				"Tags" : [{
+					"Key" : "Name",
+					"Value" : "MyVPC Route Table"
+				}]
+			}
+		},
+		
+		"PrivateRouteTable" : {
+			"Description" : "Private or Custome Route Table",
+			"Type" : "AWS::EC2::RouteTable",
+			"Properties" : {
+				"VpcId" : { "Ref" : "MyVPC" }
+			}
+		},
+		
+		"InternetGateway" : {
+			"Description" : "Creation of Internet Gateway for the MyVPC for outbound Internet access",
+			"Type" : "AWS::EC2::InternetGateway",
+			"Properties" : {
+				"Tags" : [{
+					"Key" : "Name",
+					"Value" : "MyVPC IGW"
+				}]
+			}
+		},
+		
+		"IGWAssociation" : {
+			"Description" : "Associating IGW with the MyVPC for outbound internet access",
+			"Type" : "AWS::EC2::VPCGatewayAttachment",
+			"Properties" : {
+				"InternetGatewayId" : { "Ref" : "InternetGateway" },
+				"VpcId" : { "Ref" : "MyVPC" }
+			}
+		},
+		
+		"PublicRoute" : {
+			"Description" : "Creating entry in the Route table for the Internet Outbound access",
+			"Type" : "AWS::EC2::Route",
+			"Properties" : {
+				"DestinationCidrBlock" : "0.0.0.0/0",
+				"GatewayId" : { "Ref" : "InternetGateway" },
+				"RouteTableId" : { "Ref" : "RouteTable" }
+			}
+		},
+		
+		"PublicSubnet" : {
+			"Description" : "Creation of Public Subnet for the Public Facing instances",
+			"Type" : "AWS::EC2::Subnet",
+			"Properties" : {
+				"AvailabilityZone" : "eu-west-1b",
+				"CidrBlock" : { "Ref" : "PublicSubnetCIDR" },
+				"MapPublicIpOnLaunch" : "true",
+				"VpcId" : { "Ref" : "MyVPC" }
+			}
+		},
+		
+		"PublicSubnetAssoc" : {
+			"Description" : "Associating the Public Subnet in the Route Table",
+			"Type" : "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties" : {
+				"RouteTableId" : { "Ref" : "RouteTable" },
+				"SubnetId" : { "Ref" : "PublicSubnet" }
+			}
+		},
+		
+		"PrivateSubnet" : {
+			"Description" : "Creating Private Subnet for the backend instances.",
+			"Type" : "AWS::EC2::Subnet",
+			"Properties" : {
+				"AvailabilityZone" : "eu-west-1c",
+				"CidrBlock" : { "Ref" : "PrivateSubnetCIDR" },
+				"MapPublicIpOnLaunch" : "false",
+				"VpcId" : { "Ref" : "MyVPC" }
+			}
+		},
+		
+		"PrivateSubnetAssoc" : {
+			"Description" : "Associating the Private Subnet in the Route Table",
+			"Type" : "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties" : {
+				"RouteTableId" : { "Ref" : "PrivateRouteTable" },
+				"SubnetId" : { "Ref" : "PrivateSubnet" }
+			}
+		},
+		
+		"ElasticIPForNAT" : {
+			"Description" : "Creating Elastic IP Address for the NAT Gateway",
+			"Type" : "AWS::EC2::EIP",
+			"Properties" : {
+				"Domain" : "vpc"
+			}
+		},
+		
+		"NATGateway" : {
+			"Description" : "Creating NAT Gateway for the backend instances to access the internet.",
+			"Type" : "AWS::EC2::NatGateway",
+			"Properties" : {
+				"AllocationId" : { "Fn::GetAtt" : ["ElasticIPForNAT", "AllocationId"] },
+				"SubnetId" : { "Ref" : "PublicSubnet" },
+				"Tags" : [{
+					"Key" : "Name",
+					"Value" : "MyVPC NAT"
+				}]
+			}
+		},
+		
+		"NATRoute" : {
+			"Description" : "Route Table entry for the NAT Gateway of MyVpc",
+			"Type" : "AWS::EC2::Route",
+			"Properties" : {
+				"RouteTableId" : { "Ref" : "PrivateRouteTable" },
+				"NatGatewayId" : { "Ref" : "NATGateway" },
+				"DestinationCidrBlock" : "0.0.0.0/0"
+			}
+		},
+		
+		"EC2Instance" : {
+			"Description" : "Creation of EC2 Instance for the public subnet",
+			"Type" : "AWS::EC2::Instance",
+			"Properties" : {
+				"ImageId" : { "Fn::FindInMap" : [ "ImageIdMap" , { "Ref" : "AWS::Region" } , "Ubuntu" ]},
+				"InstanceType" : { "Ref" : "InstanceType" },
+				"KeyName" : { "Fn::FindInMap" : [ "KeyPairMap" , { "Ref" : "AWS::Region" } , "existing" ] },
+				"SubnetId" : { "Ref" : "PublicSubnet" },
+				"Tags" : [{
+					"Key" : "Name",
+					"Value" : "DevInstance"
+				}]
+			}
+		},
+		
+		"EC2Instance2" : {
+			"Description" : "Creation of EC2 instance in private subnet",
+			"Type" : "AWS::EC2::Instance",
+			"Properties" : {
+				"ImageId" : { "Fn::FindInMap" : [ "ImageIdMap", { "Ref" : "AWS::Region" } , "Ubuntu" ]},
+				"InstanceType" : { "Ref" : "InstanceType" },
+				"KeyName" : { "Fn::FindInMap" : [ "KeyPairMap" , {"Ref" : "AWS::Region" } , "existing" ] },
+				"SubnetId" : { "Ref" : "PrivateSubnet" },
+				"Tags" : [{
+					"Key" : "Name",
+					"Value" : "DBInstance"
+				}]
+			}
+		}
+	
+	
+	},
+	
+	"Outputs" : {
+		"PubInstanceID" : {
+			"Description" : "Public Subnet Instance ID",
+			"Value" : { "Ref" : "EC2Instance" }
+		},
+		
+		"PrivInstanceID" : {
+			"Description" : "Private Subnet Instance ID",
+			"Value" : { "Ref" : "EC2Instance2" }
+		}
+	}
+}
